@@ -112,8 +112,12 @@ vis_nt = NetworkTables.getTable("Vision")
 # Setup window for saving parameters
 sg.theme('DarkBlue1')
 
+
+
 for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=True):
     
+    start = time.process_time()
+
     # read image array (NumPy format)
     image = frame.array
 
@@ -166,9 +170,11 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
                         print (ball_data+ ",x = " + "{:3.1f}".format(x) + ",y = " + "{:3.1f}".format(y))
+                    if (cv2.getTrackbarPos("mode", "window") == 1):
+                        dt = (time.process_time()-start)*1000 #execution time in ms
+                        print("Ball_dt: %2.2f" % dt)
                     break
-
-
+                    
     #target functions
     if (check_target() == True):
         print("target (incomplete)")
