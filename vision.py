@@ -5,6 +5,7 @@ import time
 import numpy as np
 import PySimpleGUI as sg
 import configparser
+from networktables import NetworkTables
 
 layout = [[sg.Text('use as default')],            
                  [sg.Submit(), sg.Cancel()]]      
@@ -13,6 +14,7 @@ DEFAULT_PARAMETERS_FILENAME = "params.ini"
 CENTER_PIXEL = 159.5
 CURVE_MIN = 4
 AREA_BALL = 210    #150 125 200
+ROBORIO_SERVER_STATIC_IP = "10.9.10.2"
 
 cam = PiCamera ()
 cam.resolution = (320, 240)
@@ -26,12 +28,24 @@ def save_parameters(filename):
     print(filename)
     parser = configparser.ConfigParser()
     parser.add_section('Parameters')
+    parser.set('Parameters', 'ball', str(cv2.getTrackbarPos("ball", "window")))
+    parser.set('Parameters', 'delay', str(cv2.getTrackbarPos("delay", "window")))
+    parser.set('Parameters', 'network table', str(cv2.getTrackbarPos("network table", "window")))
     parser.set('Parameters', 'ball low h', str(cv2.getTrackbarPos("ball low h", "window")))
     parser.set('Parameters', 'ball low s', str(cv2.getTrackbarPos("ball low s", "window")))
     parser.set('Parameters', 'ball low v', str(cv2.getTrackbarPos("ball low v", "window")))
     parser.set('Parameters', 'ball high h', str(cv2.getTrackbarPos("ball high h", "window")))
     parser.set('Parameters', 'ball high s', str(cv2.getTrackbarPos("ball high s", "window")))
     parser.set('Parameters', 'ball high v', str(cv2.getTrackbarPos("ball high v", "window")))
+    parser.set('Parameters', 'target', str(cv2.getTrackbarPos("target", "window")))
+    parser.set('Parameters', 'target low h', str(cv2.getTrackbarPos("target low h", "window")))
+    parser.set('Parameters', 'target low s', str(cv2.getTrackbarPos("target low s", "window")))
+    parser.set('Parameters', 'target low v', str(cv2.getTrackbarPos("target low v", "window")))
+    parser.set('Parameters', 'target high h', str(cv2.getTrackbarPos("target high h", "window")))
+    parser.set('Parameters', 'target high s', str(cv2.getTrackbarPos("target high s", "window")))
+    parser.set('Parameters', 'target high v', str(cv2.getTrackbarPos("target high v", "window")))
+   
+    # add target parameters
     fp=open(filename,'w')
     parser.write(fp)
     fp.close()
@@ -45,19 +59,55 @@ def load_parameters(filename):
         for k,v in parser.items(sect):
             cv2.setTrackbarPos(k, "window", int(v))
             print(' {} = {}'.format(k,v))
-       
+
+def check_ball():
+    if (cv2.getTrackbarPos("ball", "window") == 1): 
+        return True
+    else: 
+        return False
+    #TODO check for network table command here
+
+
+def check_target():
+    if (cv2.getTrackbarPos("target", "window") == 1): 
+        return True
+    else: 
+        return False
+    #TODO check for network table command here
+
+ball_id = 0
+lower_hue= 0
+lower_saturation = 0
+lower_value = 0
+higher_hue = 0
+higher_saturation= 0
+higher_value = 0
 time.sleep (1)
 cv2.namedWindow("window")
 cv2.createTrackbar("mode", "window" , 0, 1, on_trackbar)
 cv2.createTrackbar("ball", "window", 0, 1, on_trackbar)
+cv2.createTrackbar("delay", "window", 0,1, on_trackbar)
+cv2.createTrackbar("network table", "window", 0,1, on_trackbar)
 cv2.createTrackbar("ball low h", "window" , 0, 180, on_trackbar)
 cv2.createTrackbar("ball low s", "window" , 0, 255, on_trackbar)
 cv2.createTrackbar("ball low v", "window" , 0, 255, on_trackbar)
 cv2.createTrackbar("ball high h", "window" , 0, 180, on_trackbar)
 cv2.createTrackbar("ball high s", "window" , 0, 255, on_trackbar)
 cv2.createTrackbar("ball high v", "window" , 0, 255, on_trackbar)
+cv2.createTrackbar("target", "window", 0, 1, on_trackbar)
+cv2.createTrackbar("target low h", "window", 0, 180, on_trackbar)
+cv2.createTrackbar("target low s", "window", 0, 255, on_trackbar)
+cv2.createTrackbar("target low v", "window", 0, 255, on_trackbar)
+cv2.createTrackbar("target high h", "window" , 0, 180, on_trackbar)
+cv2.createTrackbar("target high s", "window" , 0, 255, on_trackbar)
+cv2.createTrackbar("target high v", "window" , 0, 255, on_trackbar)
 
 load_parameters(DEFAULT_PARAMETERS_FILENAME)
+
+if(cv2.getTrackbarPos("delay", "window") == 1):
+    time.sleep (20)
+NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
+vis_nt = NetworkTables.getTable("Vision")
 
 # Setup window for saving parameters
 sg.theme('DarkBlue1')
@@ -70,25 +120,36 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
     #convert to hsv for further processing
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    track_ball = cv2.getTrackbarPos("ball", "window")
-    if (track_ball == 1):
+    if check_ball() == True:
 
-        ball_lower_hue = cv2.getTrackbarPos("ball low h", "window")
-        ball_lower_saturation = cv2.getTrackbarPos("ball low s", "window")
-        ball_lower_value =cv2.getTrackbarPos("ball low v", "window")
-        ball_higher_hue =cv2.getTrackbarPos("ball high h", "window")
-        ball_higher_saturation =cv2.getTrackbarPos("ball high s", "window")
-        ball_higher_value =cv2.getTrackbarPos("ball high v", "window")
+        lower_hue = cv2.getTrackbarPos("ball low h", "window")
+        lower_saturation = cv2.getTrackbarPos("ball low s", "window")
+        lower_value =cv2.getTrackbarPos("ball low v", "window")
+        higher_hue =cv2.getTrackbarPos("ball high h", "window")
+        higher_saturation =cv2.getTrackbarPos("ball high s", "window")
+        higher_value =cv2.getTrackbarPos("ball high v", "window")
        
-        ball_lower_mask = np.array([ball_lower_hue, ball_lower_saturation, ball_lower_value])
-        ball_higher_mask = np.array([ball_higher_hue, ball_higher_saturation, ball_higher_value])
-        mask = cv2.inRange(hsv, ball_lower_mask, ball_higher_mask)
-        
+    if check_target() == True:
+
+        lower_hue = cv2.getTrackbarPos("target low h", "window")
+        lower_saturation = cv2.getTrackbarPos("target low s", "window")
+        lower_value =cv2.getTrackbarPos("target low v", "window")
+        higher_hue =cv2.getTrackbarPos("target high h", "window")
+        higher_saturation =cv2.getTrackbarPos("target high s", "window")
+        higher_value =cv2.getTrackbarPos("target high v", "window")
+
+    lower_mask = np.array([lower_hue, lower_saturation, lower_value])
+    higher_mask = np.array([higher_hue, higher_saturation, higher_value])
+    mask = cv2.inRange(hsv, lower_mask, higher_mask)
+    
+    
+    #ball functions
+    if (check_ball() == True):
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             perimeter = cv2.arcLength(c, True)
             approxCurve = cv2.approxPolyDP(c, perimeter * 0.02, True)
-            if  (len (approxCurve) > CURVE_MIN): # TODO approxCurve is a list, need list of points, not just one value
+            if  (len (approxCurve) > CURVE_MIN): 
                 (x,y), radius = cv2.minEnclosingCircle(c)
                 area = cv2.contourArea(c)
                 center = (int (x), int (y))
@@ -99,15 +160,25 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                     fov = (-0.568*y + 653.5)/2
                     difference = x - CENTER_PIXEL
                     angle = difference*(60/fov)
+                    ball_data = "%d,%.2f,%.2f" % (ball_id, distance, angle)
+                    ball_id = ball_id + 1
+                    if (cv2.getTrackbarPos("network table", "window") == 1):
+                        vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
-                        print ("x = " + "{:3.1f}".format(x) + " y = " + "{:3.1f}".format(y) + " Dist = " + "{:2.2f}".format(distance) + " Angle = " + "{:2.2f}".format(angle))
+                        print (ball_data+ ",x = " + "{:3.1f}".format(x) + ",y = " + "{:3.1f}".format(y))
+                    break
+
+
+    #target functions
+    if (check_target() == True):
+        print("target (incomplete)")
 
     # display image
     debug = cv2.getTrackbarPos("mode", "window")
     if (debug == 1):
         cv2.imshow("Image", image)
         cv2.imshow("Color", hsv)
-        if (track_ball == 1):
+        if (check_ball() == 1):
             cv2.imshow("mask", mask)
     else: 	
         cv2.destroyWindow("Color")
