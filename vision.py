@@ -10,11 +10,13 @@ from networktables import NetworkTables
 layout = [[sg.Text('use as default')],            
                  [sg.Submit(), sg.Cancel()]]      
 
-DEFAULT_PARAMETERS_FILENAME = "params.ini"
+AREA_BALL = 210    #150 125 200
 CENTER_PIXEL = 159.5
 CURVE_MIN = 4
-AREA_BALL = 210    #150 125 200
+DEFAULT_PARAMETERS_FILENAME = "params.ini"
 ROBORIO_SERVER_STATIC_IP = "10.9.10.2"
+TARGET_MAX_RATIO = 25
+TARGET_MIN_RATIO = 2
 
 cam = PiCamera ()
 cam.resolution = (320, 240)
@@ -107,12 +109,11 @@ load_parameters(DEFAULT_PARAMETERS_FILENAME)
 if(cv2.getTrackbarPos("delay", "window") == 1):
     time.sleep (20)
 NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
+NetworkTables.setUpdateRate(0.020)
 vis_nt = NetworkTables.getTable("Vision")
 
 # Setup window for saving parameters
 sg.theme('DarkBlue1')
-
-
 
 for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=True):
     
@@ -128,23 +129,27 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
 
         lower_hue = cv2.getTrackbarPos("ball low h", "window")
         lower_saturation = cv2.getTrackbarPos("ball low s", "window")
-        lower_value =cv2.getTrackbarPos("ball low v", "window")
-        higher_hue =cv2.getTrackbarPos("ball high h", "window")
-        higher_saturation =cv2.getTrackbarPos("ball high s", "window")
-        higher_value =cv2.getTrackbarPos("ball high v", "window")
+        lower_value = cv2.getTrackbarPos("ball low v", "window")
+        higher_hue = cv2.getTrackbarPos("ball high h", "window")
+        higher_saturation = cv2.getTrackbarPos("ball high s", "window")
+        higher_value = cv2.getTrackbarPos("ball high v", "window")
+
+        lower_mask = np.array([lower_hue, lower_saturation, lower_value])
+        higher_mask = np.array([higher_hue, higher_saturation, higher_value])
+        mask = cv2.inRange(hsv, lower_mask, higher_mask)
        
-    if check_target() == True:
+    elif check_target() == True:
 
         lower_hue = cv2.getTrackbarPos("target low h", "window")
         lower_saturation = cv2.getTrackbarPos("target low s", "window")
-        lower_value =cv2.getTrackbarPos("target low v", "window")
-        higher_hue =cv2.getTrackbarPos("target high h", "window")
-        higher_saturation =cv2.getTrackbarPos("target high s", "window")
-        higher_value =cv2.getTrackbarPos("target high v", "window")
+        lower_value = cv2.getTrackbarPos("target low v", "window")
+        higher_hue = cv2.getTrackbarPos("target high h", "window")
+        higher_saturation = cv2.getTrackbarPos("target high s", "window")
+        higher_value = cv2.getTrackbarPos("target high v", "window")
 
-    lower_mask = np.array([lower_hue, lower_saturation, lower_value])
-    higher_mask = np.array([higher_hue, higher_saturation, higher_value])
-    mask = cv2.inRange(hsv, lower_mask, higher_mask)
+        lower_mask = np.array([lower_hue, lower_saturation, lower_value])
+        higher_mask = np.array([higher_hue, higher_saturation, higher_value])
+        mask = cv2.inRange(hsv, lower_mask, higher_mask)
     
     
     #ball functions
@@ -155,10 +160,10 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
             approxCurve = cv2.approxPolyDP(c, perimeter * 0.02, True)
             if  (len (approxCurve) > CURVE_MIN): 
                 (x,y), radius = cv2.minEnclosingCircle(c)
-                area = cv2.contourArea(c)
+                area_ball = cv2.contourArea(c)
                 center = (int (x), int (y))
                 radius = int(radius)
-                if(area > AREA_BALL):
+                if(area_ball > AREA_BALL):
                     cv2.circle(image, center, radius, (0,0,255), 2)
                     distance = 0.00272*y*y - 1.3546*y + 180
                     fov = (-0.568*y + 653.5)/2
@@ -170,14 +175,26 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
                         print (ball_data+ ",x = " + "{:3.1f}".format(x) + ",y = " + "{:3.1f}".format(y))
-                    if (cv2.getTrackbarPos("mode", "window") == 1):
                         dt = (time.process_time()-start)*1000 #execution time in ms
                         print("Ball_dt: %2.2f" % dt)
                     break
                     
     #target functions
     if (check_target() == True):
-        print("target (incomplete)")
+        if (cv2.getTrackbarPos("mode", "window") == 1):
+            print("target (incomplete)")
+        contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in contours:
+            perimeter = cv2.arcLength(c, True)
+            approxCurve = cv2.approxPolyDP(c, perimeter * 0.02, True)
+            if  (len (approxCurve) == 8):
+                area_target = cv2.contourArea(c)
+                x,y,w,h = cv2.boundingRect(c)
+                area_rect = w*h
+                target_ratio = (area_target/area_rect)*100
+                if (target_ratio < TARGET_MAX_RATIO and target_ratio > TARGET_MIN_RATIO):
+                    cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
+                    break
 
     # display image
     debug = cv2.getTrackbarPos("mode", "window")
