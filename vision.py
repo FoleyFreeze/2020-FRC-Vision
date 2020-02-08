@@ -109,7 +109,7 @@ load_parameters(DEFAULT_PARAMETERS_FILENAME)
 if(cv2.getTrackbarPos("delay", "window") == 1):
     time.sleep (20)
 NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
-NetworkTables.setUpdateRate(0.020)
+NetworkTables.setUpdateRate(0.010)
 vis_nt = NetworkTables.getTable("Vision")
 
 # Setup window for saving parameters
