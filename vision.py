@@ -15,8 +15,9 @@ CENTER_PIXEL = 159.5
 CURVE_MIN = 4
 DEFAULT_PARAMETERS_FILENAME = "params.ini"
 ROBORIO_SERVER_STATIC_IP = "10.9.10.2"
-TARGET_MAX_RATIO = 25
-TARGET_MIN_RATIO = 2
+TARGET_MAX_RATIO = 16
+TARGET_MIN_RATIO = 10
+
 
 cam = PiCamera ()
 cam.resolution = (320, 240)
@@ -109,7 +110,7 @@ load_parameters(DEFAULT_PARAMETERS_FILENAME)
 if(cv2.getTrackbarPos("delay", "window") == 1):
     time.sleep (20)
 NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
-NetworkTables.setUpdateRate(0.010)
+NetworkTables.setUpdateRate(0.040)
 vis_nt = NetworkTables.getTable("Vision")
 
 # Setup window for saving parameters
@@ -125,7 +126,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
     #convert to hsv for further processing
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    if check_ball() == True:
+    if (check_ball() == True):
 
         lower_hue = cv2.getTrackbarPos("ball low h", "window")
         lower_saturation = cv2.getTrackbarPos("ball low s", "window")
@@ -138,7 +139,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
         higher_mask = np.array([higher_hue, higher_saturation, higher_value])
         mask = cv2.inRange(hsv, lower_mask, higher_mask)
        
-    elif check_target() == True:
+    elif (check_target() == True):
 
         lower_hue = cv2.getTrackbarPos("target low h", "window")
         lower_saturation = cv2.getTrackbarPos("target low s", "window")
@@ -175,37 +176,49 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
                         print (ball_data+ ",x = " + "{:3.1f}".format(x) + ",y = " + "{:3.1f}".format(y))
-                        dt = (time.process_time()-start)*1000 #execution time in ms
-                        print("Ball_dt: %2.2f" % dt)
+                        #dt = (time.process_time()-start)*1000 #execution time in ms
+                        #print("Ball_dt: %2.2f" % dt)
                     break
                     
     #target functions
     if (check_target() == True):
-        if (cv2.getTrackbarPos("mode", "window") == 1):
-            print("target (incomplete)")
+        #if (cv2.getTrackbarPos("mode", "window") == 1):
+            #print("target (incomplete)")
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        #debug = cv2.getTrackbarPos("mode", "window")
+        #if (debug == 1):        
+            #c_count = 0
+            #for contour in contours:
+                #cv2.drawContours(image, contour, -1, (0, 255, 0), 3)        
+                #c_count = c_count + 1
+                #print (c_count)
+
         for c in contours:
             perimeter = cv2.arcLength(c, True)
-            approxCurve = cv2.approxPolyDP(c, perimeter * 0.02, True)
-            if  (len (approxCurve) == 8):
+            approxCurve = cv2.approxPolyDP(c, perimeter * 0.01, True)
+            print(len(approxCurve))
+            if  (len (approxCurve) >= 8 and len(approxCurve) <=10):
                 area_target = cv2.contourArea(c)
                 x,y,w,h = cv2.boundingRect(c)
                 area_rect = w*h
                 target_ratio = (area_target/area_rect)*100
+                print ("tar_a=" + "{:3.2f}".format(area_target) + ",tar_rect=" + "{:3.2f}".format(area_rect) +",ratio = " + "{:3.2f}".format(target_ratio) )
                 if (target_ratio < TARGET_MAX_RATIO and target_ratio > TARGET_MIN_RATIO):
                     cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
+                    cv2.drawContours(image, contours, -1, (0, 255, 0), 3)        
                     break
 
     # display image
     debug = cv2.getTrackbarPos("mode", "window")
     if (debug == 1):
         cv2.imshow("Image", image)
-        cv2.imshow("Color", hsv)
-        if (check_ball() == 1):
-            cv2.imshow("mask", mask)
+        #cv2.imshow("Color", hsv)
+        cv2.imshow("mask", mask)
     else: 	
-        cv2.destroyWindow("Color")
-        cv2.destroyWindow("Image")
+        #cv2.destroyWindow("Color")
+        if (cv2.getWindowProperty("Image", cv2.WND_PROP_VISIBLE) == 1):
+            cv2.destroyWindow("Image")
         if (cv2.getWindowProperty("mask", cv2.WND_PROP_VISIBLE) == 1):
             cv2.destroyWindow("mask")
 
