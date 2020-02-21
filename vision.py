@@ -6,6 +6,8 @@ import numpy as np
 import PySimpleGUI as sg
 import configparser
 from networktables import NetworkTables
+import RPi.GPIO as GPIO
+import smbus
 
 layout = [[sg.Text('use as default')],            
                  [sg.Submit(), sg.Cancel()]]      
@@ -15,14 +17,14 @@ CENTER_PIXEL = 159.5
 CURVE_MIN = 4
 DEFAULT_PARAMETERS_FILENAME = "params.ini"
 ROBORIO_SERVER_STATIC_IP = "10.9.10.2"
-TARGET_MAX_RATIO = 16
-TARGET_MIN_RATIO = 10
-
-
-cam = PiCamera ()
-cam.resolution = (320, 240)
-
-rawcapture = PiRGBArray (cam, size=(320,240))
+TARGET_MAX_RATIO = 20
+TARGET_MIN_RATIO = 7
+font = cv2.FONT_HERSHEY_SIMPLEX
+CAMERA_MUX_SELECTION_PIN = 7
+CAMERA_MUX_ENABLE1_PIN = 11
+CAMERA_MUX_ENABLE2_PIN = 12
+BALL_CAMERA = 'A' # Camera A on the multi-camera adapter
+TARGET_CAMERA = 'C' # Camera C on the multi-camera adapter
 
 def on_trackbar():
     pass 
@@ -48,7 +50,7 @@ def save_parameters(filename):
     parser.set('Parameters', 'target high s', str(cv2.getTrackbarPos("target high s", "window")))
     parser.set('Parameters', 'target high v', str(cv2.getTrackbarPos("target high v", "window")))
    
-    # add target parameters
+    # Add target parameters
     fp=open(filename,'w')
     parser.write(fp)
     fp.close()
@@ -70,7 +72,6 @@ def check_ball():
         return False
     #TODO check for network table command here
 
-
 def check_target():
     if (cv2.getTrackbarPos("target", "window") == 1): 
         return True
@@ -78,14 +79,67 @@ def check_target():
         return False
     #TODO check for network table command here
 
+def enable_camera(cam):
+    if (cam == 'A'):
+        bus.write_i2c_block_data(0x70, 0x00, [0x04])
+        GPIO.output(CAMERA_MUX_SELECTION_PIN, GPIO.LOW)
+        GPIO.output(CAMERA_MUX_ENABLE1_PIN, GPIO.LOW)
+        GPIO.output(CAMERA_MUX_ENABLE2_PIN, GPIO.HIGH)
+    elif (cam == 'B'):
+        bus.write_i2c_block_data(0x70, 0x00, [0x05])
+        GPIO.output(CAMERA_MUX_SELECTION_PIN, GPIO.HIGH)
+        GPIO.output(CAMERA_MUX_ENABLE1_PIN, GPIO.LOW)
+        GPIO.output(CAMERA_MUX_ENABLE2_PIN, GPIO.HIGH)
+    elif (cam == 'C'):
+        bus.write_i2c_block_data(0x70, 0x00, [0x06])
+        GPIO.output(CAMERA_MUX_SELECTION_PIN, GPIO.LOW)
+        GPIO.output(CAMERA_MUX_ENABLE1_PIN, GPIO.HIGH)
+        GPIO.output(CAMERA_MUX_ENABLE2_PIN, GPIO.LOW)
+    elif (cam == 'D'):
+        bus.write_i2c_block_data(0x70, 0x00, [0x07])
+        GPIO.output(CAMERA_MUX_SELECTION_PIN, GPIO.HIGH)
+        GPIO.output(CAMERA_MUX_ENABLE1_PIN, GPIO.HIGH)
+        GPIO.output(CAMERA_MUX_ENABLE2_PIN, GPIO.LOW)
+
+cam = PiCamera ()
+cam.resolution = (320, 240)
+cam.exposure_mode = "snow"
+cam.awb_mode = "off"
+cam.awb_gains = (1.3, 1.8)
+cam.shutter_speed = 8000
+cam.saturation = -50
+time.sleep(2)
+rawcapture = PiRGBArray (cam, size=(320,240))
+
+bus = smbus.SMBus(1) # Used to select a camera on the I2C mux on the camera mux board
+GPIO.setmode(GPIO.BOARD) # Used to select a camera on the camera mux board
+GPIO.setup(CAMERA_MUX_SELECTION_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+GPIO.setup(CAMERA_MUX_ENABLE1_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+GPIO.setup(CAMERA_MUX_ENABLE2_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+GPIO.setup(15, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.setup(16, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.setup(21, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.setup(22, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.output(11, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.output(12, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.output(15, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.output(16, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.output(21, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+GPIO.output(22, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+
+# Start with target camera enabled
+enable_camera(TARGET_CAMERA)
+
 ball_id = 0
+
 lower_hue= 0
 lower_saturation = 0
 lower_value = 0
 higher_hue = 0
 higher_saturation= 0
 higher_value = 0
-time.sleep (1)
+# Setup window for saving parameters
+sg.theme('DarkBlue1')
 cv2.namedWindow("window")
 cv2.createTrackbar("mode", "window" , 0, 1, on_trackbar)
 cv2.createTrackbar("ball", "window", 0, 1, on_trackbar)
@@ -113,17 +167,14 @@ NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
 NetworkTables.setUpdateRate(0.040)
 vis_nt = NetworkTables.getTable("Vision")
 
-# Setup window for saving parameters
-sg.theme('DarkBlue1')
-
 for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=True):
     
     start = time.process_time()
 
-    # read image array (NumPy format)
+    # Read image array (NumPy format)
     image = frame.array
 
-    #convert to hsv for further processing
+    # Convert to hsv for further processing
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
     if (check_ball() == True):
@@ -151,10 +202,10 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
         lower_mask = np.array([lower_hue, lower_saturation, lower_value])
         higher_mask = np.array([higher_hue, higher_saturation, higher_value])
         mask = cv2.inRange(hsv, lower_mask, higher_mask)
-    
-    
-    #ball functions
+        
+    # Ball functions
     if (check_ball() == True):
+        enable_camera(BALL_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             perimeter = cv2.arcLength(c, True)
@@ -180,57 +231,46 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         #print("Ball_dt: %2.2f" % dt)
                     break
                     
-    #target functions
+    # Target functions
     if (check_target() == True):
-        #if (cv2.getTrackbarPos("mode", "window") == 1):
-            #print("target (incomplete)")
+        enable_camera(TARGET_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        #debug = cv2.getTrackbarPos("mode", "window")
-        #if (debug == 1):        
-            #c_count = 0
-            #for contour in contours:
-                #cv2.drawContours(image, contour, -1, (0, 255, 0), 3)        
-                #c_count = c_count + 1
-                #print (c_count)
-
         for c in contours:
             perimeter = cv2.arcLength(c, True)
             approxCurve = cv2.approxPolyDP(c, perimeter * 0.01, True)
             print(len(approxCurve))
-            if  (len (approxCurve) >= 8 and len(approxCurve) <=10):
+            if  (len (approxCurve) >= 8):
                 area_target = cv2.contourArea(c)
                 x,y,w,h = cv2.boundingRect(c)
                 area_rect = w*h
                 target_ratio = (area_target/area_rect)*100
                 print ("tar_a=" + "{:3.2f}".format(area_target) + ",tar_rect=" + "{:3.2f}".format(area_rect) +",ratio = " + "{:3.2f}".format(target_ratio) )
                 if (target_ratio < TARGET_MAX_RATIO and target_ratio > TARGET_MIN_RATIO):
+                    cv2.putText(image, str (area_rect), (round(x+w/2),y), font, 1,(255,255,255),2,cv2.LINE_AA)
                     cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
                     cv2.drawContours(image, contours, -1, (0, 255, 0), 3)        
                     break
 
-    # display image
+    # Display images
     debug = cv2.getTrackbarPos("mode", "window")
     if (debug == 1):
         cv2.imshow("Image", image)
-        #cv2.imshow("Color", hsv)
         cv2.imshow("mask", mask)
     else: 	
-        #cv2.destroyWindow("Color")
         if (cv2.getWindowProperty("Image", cv2.WND_PROP_VISIBLE) == 1):
             cv2.destroyWindow("Image")
         if (cv2.getWindowProperty("mask", cv2.WND_PROP_VISIBLE) == 1):
             cv2.destroyWindow("mask")
 
-    # wait for 1ms to see if the escape key was pressed, and if so, exit
-    key = cv2.waitKey(1)
-    
-    # clear stream for image array 
+    # Clear stream for image array 
     rawcapture.truncate(0)
 
-    if key == 27: #press esc, close program
+    # Wait for 1ms to see if the escape key was pressed, and if so, exit
+    key = cv2.waitKey(1)
+    
+    if key == 27: # Press esc, close program
         break
-    elif key == ord('s'): #press 's', save parameters
+    elif key == ord('s'): # Press 's', save parameters
         fname = sg.popup_get_file('Save Parameters')
         if not fname:
             sg.popup("Warning", "No filename supplied, using " + DEFAULT_PARAMETERS_FILENAME)
@@ -239,5 +279,4 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
             sg.popup('The filename you chose was', fname)
         save_parameters(fname) # fname has the filename
 
-    
 cv2.destroyAllWindows()
