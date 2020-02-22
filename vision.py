@@ -9,9 +9,6 @@ from networktables import NetworkTables
 import RPi.GPIO as GPIO
 import smbus
 
-layout = [[sg.Text('use as default')],            
-                 [sg.Submit(), sg.Cancel()]]      
-
 AREA_BALL = 210    #150 125 200
 CENTER_PIXEL = 159.5
 CURVE_MIN = 4
@@ -23,14 +20,24 @@ font = cv2.FONT_HERSHEY_SIMPLEX
 CAMERA_MUX_SELECTION_PIN = 7
 CAMERA_MUX_ENABLE1_PIN = 11
 CAMERA_MUX_ENABLE2_PIN = 12
-BALL_CAMERA = 'A' # Camera A on the multi-camera adapter
-TARGET_CAMERA = 'C' # Camera C on the multi-camera adapter
+
+INVALID_CAMERA = 0
+CAMERA_A = 1
+CAMERA_B = 2
+CAMERA_C = 3
+CAMERA_D = 4
+
+BALL_CAMERA = CAMERA_A # Camera A on the multi-camera adapter
+TARGET_CAMERA = CAMERA_C # Camera C on the multi-camera adapter
+CAMERA_NAMES = ['Invalid', 'A', 'B', 'C', 'D']
+
+current_camera = INVALID_CAMERA
 
 def on_trackbar():
     pass 
 
 def save_parameters(filename):
-    print(filename)
+    print("Saving " + filename)
     parser = configparser.ConfigParser()
     parser.add_section('Parameters')
     parser.set('Parameters', 'ball', str(cv2.getTrackbarPos("ball", "window")))
@@ -54,16 +61,16 @@ def save_parameters(filename):
     fp=open(filename,'w')
     parser.write(fp)
     fp.close()
+    print("Saved " + filename)
 
 def load_parameters(filename):
-    print(filename)
+    print("Loading " + filename)
     parser = configparser.ConfigParser()
     parser.read(filename)
     for sect in parser.sections():
-        print('Section:', sect)
         for k,v in parser.items(sect):
             cv2.setTrackbarPos(k, "window", int(v))
-            print(' {} = {}'.format(k,v))
+    print("Loaded " + filename)
 
 def check_ball():
     if (cv2.getTrackbarPos("ball", "window") == 1): 
@@ -80,36 +87,33 @@ def check_target():
     #TODO check for network table command here
 
 def enable_camera(cam):
-    if (cam == 'A'):
+    set_cam = INVALID_CAMERA
+    if (cam == CAMERA_A):
         bus.write_i2c_block_data(0x70, 0x00, [0x04])
         GPIO.output(CAMERA_MUX_SELECTION_PIN, GPIO.LOW)
         GPIO.output(CAMERA_MUX_ENABLE1_PIN, GPIO.LOW)
         GPIO.output(CAMERA_MUX_ENABLE2_PIN, GPIO.HIGH)
-    elif (cam == 'B'):
+        set_cam = CAMERA_A
+    elif (cam == CAMERA_B):
         bus.write_i2c_block_data(0x70, 0x00, [0x05])
         GPIO.output(CAMERA_MUX_SELECTION_PIN, GPIO.HIGH)
         GPIO.output(CAMERA_MUX_ENABLE1_PIN, GPIO.LOW)
         GPIO.output(CAMERA_MUX_ENABLE2_PIN, GPIO.HIGH)
-    elif (cam == 'C'):
+        set_cam = CAMERA_B
+    elif (cam == CAMERA_C):
         bus.write_i2c_block_data(0x70, 0x00, [0x06])
         GPIO.output(CAMERA_MUX_SELECTION_PIN, GPIO.LOW)
         GPIO.output(CAMERA_MUX_ENABLE1_PIN, GPIO.HIGH)
         GPIO.output(CAMERA_MUX_ENABLE2_PIN, GPIO.LOW)
-    elif (cam == 'D'):
+        set_cam = CAMERA_C
+    elif (cam == CAMERA_D):
         bus.write_i2c_block_data(0x70, 0x00, [0x07])
         GPIO.output(CAMERA_MUX_SELECTION_PIN, GPIO.HIGH)
         GPIO.output(CAMERA_MUX_ENABLE1_PIN, GPIO.HIGH)
         GPIO.output(CAMERA_MUX_ENABLE2_PIN, GPIO.LOW)
-
-cam = PiCamera ()
-cam.resolution = (320, 240)
-cam.exposure_mode = "snow"
-cam.awb_mode = "off"
-cam.awb_gains = (1.3, 1.8)
-cam.shutter_speed = 8000
-cam.saturation = -50
-time.sleep(2)
-rawcapture = PiRGBArray (cam, size=(320,240))
+        set_cam = CAMERA_D
+    print("Camera " + CAMERA_NAMES[set_cam] + " enabled")
+    return(set_cam)
 
 bus = smbus.SMBus(1) # Used to select a camera on the I2C mux on the camera mux board
 GPIO.setmode(GPIO.BOARD) # Used to select a camera on the camera mux board
@@ -127,8 +131,19 @@ GPIO.output(16, GPIO.HIGH) # No idea why this is required, it only appears in th
 GPIO.output(21, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
 GPIO.output(22, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
 
+time.sleep(2)
 # Start with target camera enabled
-enable_camera(TARGET_CAMERA)
+current_camera = enable_camera(TARGET_CAMERA)
+
+cam = PiCamera ()
+cam.resolution = (320, 240)
+cam.exposure_mode = "snow"
+cam.awb_mode = "off"
+cam.awb_gains = (1.3, 1.8)
+cam.shutter_speed = 8000
+cam.saturation = -50
+time.sleep(2)
+rawcapture = PiRGBArray (cam, size=(320,240))
 
 ball_id = 0
 
@@ -139,6 +154,8 @@ higher_hue = 0
 higher_saturation= 0
 higher_value = 0
 # Setup window for saving parameters
+layout = [[sg.Text('use as default')],            
+                 [sg.Submit(), sg.Cancel()]] 
 sg.theme('DarkBlue1')
 cv2.namedWindow("window")
 cv2.createTrackbar("mode", "window" , 0, 1, on_trackbar)
@@ -205,7 +222,8 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
         
     # Ball functions
     if (check_ball() == True):
-        enable_camera(BALL_CAMERA)
+        if(current_camera != BALL_CAMERA):
+            current_camera = enable_camera(BALL_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             perimeter = cv2.arcLength(c, True)
@@ -233,7 +251,8 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                     
     # Target functions
     if (check_target() == True):
-        enable_camera(TARGET_CAMERA)
+        if(current_camera != TARGET_CAMERA):
+            current_camera = enable_camera(TARGET_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             perimeter = cv2.arcLength(c, True)
