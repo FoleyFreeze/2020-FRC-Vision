@@ -1,3 +1,0 @@
-Use the Arducam Multi-Camera Adapter depending on the value of camera_adapter_installed
-Convert target distance measurement from mm to inches
-Define object points matrix based on world coorindate origin of bottom center of image (not used)
