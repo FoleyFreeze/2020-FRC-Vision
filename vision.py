@@ -8,6 +8,7 @@ import configparser
 from networktables import NetworkTables
 import RPi.GPIO as GPIO
 import smbus
+import math
 
 AREA_BALL = 210    #150 125 200
 CENTER_PIXEL = 159.5
@@ -16,10 +17,12 @@ DEFAULT_PARAMETERS_FILENAME = "params.ini"
 ROBORIO_SERVER_STATIC_IP = "10.9.10.2"
 TARGET_MAX_RATIO = 20
 TARGET_MIN_RATIO = 7
-font = cv2.FONT_HERSHEY_SIMPLEX
+FONT = cv2.FONT_HERSHEY_SIMPLEX
 CAMERA_MUX_SELECTION_PIN = 7
 CAMERA_MUX_ENABLE1_PIN = 11
 CAMERA_MUX_ENABLE2_PIN = 12
+HORIZONTAL_FOV = 62.2 # degrees, per Pi Camera spec
+HORIZONTAL_DEGREES_PER_PIXEL = (HORIZONTAL_FOV / 320)
 
 INVALID_CAMERA = 0
 CAMERA_A = 1
@@ -32,6 +35,29 @@ TARGET_CAMERA = CAMERA_C # Camera C on the multi-camera adapter
 CAMERA_NAMES = ['Invalid', 'A', 'B', 'C', 'D']
 
 current_camera = INVALID_CAMERA
+
+camera_matrix = np.array([
+                         [248.01186724863015, 0.0, 152.48419871015008],
+                         [0.0, 247.4901149147132, 117.42065682051265],
+                         [0.0, 0.0, 1.0]
+                         ])
+
+distortion_coefficients = np.array([0.08538889489545388, 0.4977001277591947, -0.0022912208997961027, -0.005253011701686469, -2.761625574572033])
+
+# object points (world coordinates):
+# units are in mm, since camera calibration is done in mm 
+# upper-left corner: (0,0,0) upper-right corner: (977.9,0,0)
+# lower-left corner: (0,431.8,0) lower-right corner: (977.9,431.8,0)
+               
+object_points = np.array([
+                        (0.0, 0.0, 0.0),
+                        (977.9, 0.0, 0.0),
+                        (0.0, 431.8, 0.0),
+                        (977.9, 431.8, 0.0)
+                        ])
+
+#mtx = [[248.01186724863015, 0.0, 152.48419871015008], [0.0, 247.4901149147132, 117.42065682051265], [0.0, 0.0, 1.0]]
+#dist = [[0.08538889489545388, 0.4977001277591947, -0.0022912208997961027, -0.005253011701686469, -2.761625574572033]]
 
 def on_trackbar():
     pass 
@@ -115,25 +141,25 @@ def enable_camera(cam):
     print("Camera " + CAMERA_NAMES[set_cam] + " enabled")
     return(set_cam)
 
-bus = smbus.SMBus(1) # Used to select a camera on the I2C mux on the camera mux board
-GPIO.setmode(GPIO.BOARD) # Used to select a camera on the camera mux board
-GPIO.setup(CAMERA_MUX_SELECTION_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
-GPIO.setup(CAMERA_MUX_ENABLE1_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
-GPIO.setup(CAMERA_MUX_ENABLE2_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
-GPIO.setup(15, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.setup(16, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.setup(21, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.setup(22, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.output(11, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.output(12, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.output(15, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.output(16, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.output(21, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-GPIO.output(22, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+#bus = smbus.SMBus(1) # Used to select a camera on the I2C mux on the camera mux board
+#GPIO.setmode(GPIO.BOARD) # Used to select a camera on the camera mux board
+#GPIO.setup(CAMERA_MUX_SELECTION_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+#GPIO.setup(CAMERA_MUX_ENABLE1_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+#GPIO.setup(CAMERA_MUX_ENABLE2_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+#GPIO.setup(15, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.setup(16, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.setup(21, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.setup(22, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.output(11, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.output(12, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.output(15, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.output(16, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.output(21, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+#GPIO.output(22, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
 
 time.sleep(2)
 # Start with target camera enabled
-current_camera = enable_camera(TARGET_CAMERA)
+#current_camera = enable_camera(TARGET_CAMERA)
 
 cam = PiCamera ()
 cam.resolution = (320, 240)
@@ -146,6 +172,7 @@ time.sleep(2)
 rawcapture = PiRGBArray (cam, size=(320,240))
 
 ball_id = 0
+target_id = 0
 
 lower_hue= 0
 lower_saturation = 0
@@ -183,6 +210,8 @@ if(cv2.getTrackbarPos("delay", "window") == 1):
 NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
 NetworkTables.setUpdateRate(0.040)
 vis_nt = NetworkTables.getTable("Vision")
+
+print("Started")
 
 for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=True):
     
@@ -222,8 +251,8 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
         
     # Ball functions
     if (check_ball() == True):
-        if(current_camera != BALL_CAMERA):
-            current_camera = enable_camera(BALL_CAMERA)
+        #if(current_camera != BALL_CAMERA):
+        #    current_camera = enable_camera(BALL_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             perimeter = cv2.arcLength(c, True)
@@ -239,20 +268,21 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                     fov = (-0.568*y + 653.5)/2
                     difference = x - CENTER_PIXEL
                     angle = difference*(60/fov)
+
                     ball_data = "%d,%.2f,%.2f" % (ball_id, distance, angle)
                     ball_id = ball_id + 1
                     if (cv2.getTrackbarPos("network table", "window") == 1):
                         vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
-                        print (ball_data+ ",x = " + "{:3.1f}".format(x) + ",y = " + "{:3.1f}".format(y))
+                        print (ball_data)
                         #dt = (time.process_time()-start)*1000 #execution time in ms
                         #print("Ball_dt: %2.2f" % dt)
                     break
                     
     # Target functions
     if (check_target() == True):
-        if(current_camera != TARGET_CAMERA):
-            current_camera = enable_camera(TARGET_CAMERA)
+        #if(current_camera != TARGET_CAMERA):
+        #    current_camera = enable_camera(TARGET_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             perimeter = cv2.arcLength(c, True)
@@ -265,9 +295,36 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                 target_ratio = (area_target/area_rect)*100
                 print ("tar_a=" + "{:3.2f}".format(area_target) + ",tar_rect=" + "{:3.2f}".format(area_rect) +",ratio = " + "{:3.2f}".format(target_ratio) )
                 if (target_ratio < TARGET_MAX_RATIO and target_ratio > TARGET_MIN_RATIO):
-                    cv2.putText(image, str (area_rect), (round(x+w/2),y), font, 1,(255,255,255),2,cv2.LINE_AA)
+                    cv2.putText(image, str (area_rect), (round(x+w/2),y), FONT, 1,(255,255,255),2,cv2.LINE_AA)
                     cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
-                    cv2.drawContours(image, contours, -1, (0, 255, 0), 3)        
+                    cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
+
+                    # image points (from bounding rectangle around target):
+                    # upper-left corner: (x,y) upper-right corner: (x+w,y)
+                    # lower-left corner: (x,y+h) lower-right corner: (x+w,y+h)
+                    image_points = np.array([
+                                            (x, y),
+                                            (x+w, y),
+                                            (x, y+h),
+                                            (x+w, y+h)
+                                            ], dtype="double")
+
+                    ret, rvec, tvec = cv2.solvePnP(object_points, image_points, camera_matrix, distortion_coefficients)
+                    x_object = tvec[0][0]
+                    z_object = tvec[2][0]
+                    distance = math.sqrt(x_object**2 + z_object**2)
+                    #angle = math.atan2(x_object,z_object)
+                    angle_to = (x - CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
+
+
+                    target_data = "%d,%.2f,%.2f" % (target_id, distance, angle_to)
+                    target_id = target_id + 1
+                    if (cv2.getTrackbarPos("network table", "window") == 1):
+                        vis_nt.putString("Target", target_data)
+                    if (cv2.getTrackbarPos("mode", "window") == 1):
+                        print (target_data)
+                        #dt = (time.process_time()-start)*1000 #execution time in ms
+                        #print("Target_dt: %2.2f" % dt)
                     break
 
     # Display images
