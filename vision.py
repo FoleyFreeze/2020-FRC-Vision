@@ -23,6 +23,7 @@ CAMERA_MUX_ENABLE1_PIN = 11
 CAMERA_MUX_ENABLE2_PIN = 12
 HORIZONTAL_FOV = 62.2 # degrees, per Pi Camera spec
 HORIZONTAL_DEGREES_PER_PIXEL = (HORIZONTAL_FOV / 320)
+MM_TO_INCHES = 25.4
 
 INVALID_CAMERA = 0
 CAMERA_A = 1
@@ -35,6 +36,7 @@ TARGET_CAMERA = CAMERA_C # Camera C on the multi-camera adapter
 CAMERA_NAMES = ['Invalid', 'A', 'B', 'C', 'D']
 
 current_camera = INVALID_CAMERA
+camera_adapter_installed = False
 
 camera_matrix = np.array([
                          [248.01186724863015, 0.0, 152.48419871015008],
@@ -44,17 +46,31 @@ camera_matrix = np.array([
 
 distortion_coefficients = np.array([0.08538889489545388, 0.4977001277591947, -0.0022912208997961027, -0.005253011701686469, -2.761625574572033])
 
-# object points (world coordinates):
+# object points upper left
+# world coordinates are defined with the origin in the upper-left corner
 # units are in mm, since camera calibration is done in mm 
 # upper-left corner: (0,0,0) upper-right corner: (977.9,0,0)
 # lower-left corner: (0,431.8,0) lower-right corner: (977.9,431.8,0)
                
-object_points = np.array([
-                        (0.0, 0.0, 0.0),
-                        (977.9, 0.0, 0.0),
-                        (0.0, 431.8, 0.0),
-                        (977.9, 431.8, 0.0)
-                        ])
+object_points_upper_left = np.array([
+                                    (0.0, 0.0, 0.0),
+                                    (977.9, 0.0, 0.0),
+                                    (0.0, 431.8, 0.0),
+                                    (977.9, 431.8, 0.0)
+                                    ])
+
+# object points bottom center
+# world coordinates are defined with the origin in the bottom center
+# units are in mm, since camera calibration is done in mm 
+# upper-left corner: (-488.95, 431.8, 0) upper-right corner: (488.95,431.8,0)
+# lower-left corner: (-488.95,0,0) lower-right corner: (488.95,0,0)
+               
+object_points_bottom_center = np.array([
+                                       (-488.95, 431.8, 0.0),
+                                       (488.95, 431.8, 0.0),
+                                       (-488.95, 0.0, 0.0),
+                                       (488.95, 0.0, 0.0)
+                                       ])
 
 #mtx = [[248.01186724863015, 0.0, 152.48419871015008], [0.0, 247.4901149147132, 117.42065682051265], [0.0, 0.0, 1.0]]
 #dist = [[0.08538889489545388, 0.4977001277591947, -0.0022912208997961027, -0.005253011701686469, -2.761625574572033]]
@@ -141,25 +157,27 @@ def enable_camera(cam):
     print("Camera " + CAMERA_NAMES[set_cam] + " enabled")
     return(set_cam)
 
-#bus = smbus.SMBus(1) # Used to select a camera on the I2C mux on the camera mux board
-#GPIO.setmode(GPIO.BOARD) # Used to select a camera on the camera mux board
-#GPIO.setup(CAMERA_MUX_SELECTION_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
-#GPIO.setup(CAMERA_MUX_ENABLE1_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
-#GPIO.setup(CAMERA_MUX_ENABLE2_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
-#GPIO.setup(15, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.setup(16, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.setup(21, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.setup(22, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.output(11, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.output(12, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.output(15, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.output(16, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.output(21, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
-#GPIO.output(22, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+if (camera_adapter_installed == True):
+    bus = smbus.SMBus(1) # Used to select a camera on the I2C mux on the camera mux board
+    GPIO.setmode(GPIO.BOARD) # Used to select a camera on the camera mux board
+    GPIO.setup(CAMERA_MUX_SELECTION_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+    GPIO.setup(CAMERA_MUX_ENABLE1_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+    GPIO.setup(CAMERA_MUX_ENABLE2_PIN, GPIO.OUT) # Used to select a camera on the camera mux board
+    GPIO.setup(15, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.setup(16, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.setup(21, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.setup(22, GPIO.OUT) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.output(11, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.output(12, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.output(15, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.output(16, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.output(21, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
+    GPIO.output(22, GPIO.HIGH) # No idea why this is required, it only appears in the demo code, with no explanation
 
 time.sleep(2)
 # Start with target camera enabled
-#current_camera = enable_camera(TARGET_CAMERA)
+if (camera_adapter_installed == True):
+    current_camera = enable_camera(TARGET_CAMERA)
 
 cam = PiCamera ()
 cam.resolution = (320, 240)
@@ -251,8 +269,8 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
         
     # Ball functions
     if (check_ball() == True):
-        #if(current_camera != BALL_CAMERA):
-        #    current_camera = enable_camera(BALL_CAMERA)
+        if((camera_adapter_installed == True) and (current_camera != BALL_CAMERA)):
+            current_camera = enable_camera(BALL_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             perimeter = cv2.arcLength(c, True)
@@ -281,8 +299,8 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                     
     # Target functions
     if (check_target() == True):
-        #if(current_camera != TARGET_CAMERA):
-        #    current_camera = enable_camera(TARGET_CAMERA)
+        if((camera_adapter_installed == True) and (current_camera != TARGET_CAMERA)):
+            current_camera = enable_camera(TARGET_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             perimeter = cv2.arcLength(c, True)
@@ -309,13 +327,13 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                                             (x+w, y+h)
                                             ], dtype="double")
 
-                    ret, rvec, tvec = cv2.solvePnP(object_points, image_points, camera_matrix, distortion_coefficients)
+                    ret, rvec, tvec = cv2.solvePnP(object_points_upper_left, image_points, camera_matrix, distortion_coefficients)
                     x_object = tvec[0][0]
                     z_object = tvec[2][0]
-                    distance = math.sqrt(x_object**2 + z_object**2)
+                    distance = math.sqrt(x_object**2 + z_object**2) # mm
+                    distance = distance / MM_TO_INCHES
                     #angle = math.atan2(x_object,z_object)
                     angle_to = (x - CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
-
 
                     target_data = "%d,%.2f,%.2f" % (target_id, distance, angle_to)
                     target_id = target_id + 1
