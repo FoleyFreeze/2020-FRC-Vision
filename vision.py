@@ -23,7 +23,6 @@ CAMERA_MUX_ENABLE1_PIN = 11
 CAMERA_MUX_ENABLE2_PIN = 12
 HORIZONTAL_FOV = 62.2 # degrees, per Pi Camera spec
 HORIZONTAL_DEGREES_PER_PIXEL = (HORIZONTAL_FOV / 320)
-MM_TO_INCHES = 25.4
 
 INVALID_CAMERA = 0
 CAMERA_A = 1
@@ -122,11 +121,10 @@ def check_ball():
     #TODO check for network table command here
 
 def check_target():
-    if (cv2.getTrackbarPos("target", "window") == 1): 
+    if ( (cv2.getTrackbarPos("target", "window") == 1) or (pi_nt.getBoolean("TgtEnable",True) is True) ):
         return True
     else: 
         return False
-    #TODO check for network table command here
 
 def enable_camera(cam):
     set_cam = INVALID_CAMERA
@@ -157,6 +155,13 @@ def enable_camera(cam):
     print("Camera " + CAMERA_NAMES[set_cam] + " enabled")
     return(set_cam)
 
+def makeNTConnection():
+    NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
+    if (cv2.getTrackbarPos("network table", "window") == 1):
+        while (not NetworkTables.isConnected()):
+            time.sleep(0.5)
+        print ("NT connected to " + getRemoteAddress())
+    
 if (camera_adapter_installed == True):
     bus = smbus.SMBus(1) # Used to select a camera on the I2C mux on the camera mux board
     GPIO.setmode(GPIO.BOARD) # Used to select a camera on the camera mux board
@@ -223,18 +228,34 @@ cv2.createTrackbar("target high v", "window" , 0, 255, on_trackbar)
 
 load_parameters(DEFAULT_PARAMETERS_FILENAME)
 
+print("Started")
+
 if(cv2.getTrackbarPos("delay", "window") == 1):
-    time.sleep (20)
-NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
+    time.sleep(16)
+
+makeNTConnection()
 NetworkTables.setUpdateRate(0.040)
 vis_nt = NetworkTables.getTable("Vision")
+pi_nt = NetworkTables.getTable("Pi")
 
-print("Started")
+pi_alive_time = time.process_time()
+pi_alive_value = 0
 
 for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=True):
     
     start = time.process_time()
 
+    if ((start - pi_alive_time) > 1.0):
+        pi_alive_value = pi_alive_value + 1
+        pi_nt.putValue("pi_alive",pi_alive_value)
+        pi_alive_time = time.process_time()
+
+        if (not NetworkTables.isConnected()):
+            makeNTConnection()
+            NetworkTables.setUpdateRate(0.040)
+            vis_nt = NetworkTables.getTable("Vision")
+            pi_nt = NetworkTables.getTable("Pi")
+            
     # Read image array (NumPy format)
     image = frame.array
 
@@ -289,8 +310,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
 
                     ball_data = "%d,%.2f,%.2f" % (ball_id, distance, angle)
                     ball_id = ball_id + 1
-                    if (cv2.getTrackbarPos("network table", "window") == 1):
-                        vis_nt.putString("Ball", ball_data)
+                    vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
                         print (ball_data)
                         #dt = (time.process_time()-start)*1000 #execution time in ms
@@ -303,42 +323,25 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
             current_camera = enable_camera(TARGET_CAMERA)
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
-            perimeter = cv2.arcLength(c, True)
-            approxCurve = cv2.approxPolyDP(c, perimeter * 0.01, True)
-            print(len(approxCurve))
-            if  (len (approxCurve) >= 8):
+            x,y,w,h = cv2.boundingRect(c)
+            area_rect = w*h
+            if (area_rect > 100):
                 area_target = cv2.contourArea(c)
-                x,y,w,h = cv2.boundingRect(c)
-                area_rect = w*h
                 target_ratio = (area_target/area_rect)*100
-                print ("tar_a=" + "{:3.2f}".format(area_target) + ",tar_rect=" + "{:3.2f}".format(area_rect) +",ratio = " + "{:3.2f}".format(target_ratio) )
+                if (cv2.getTrackbarPos("mode", "window") == 1):
+                    print ("tar_a=" + "{:3.2f}".format(area_target) + ",tar_rect=" + "{:3.2f}".format(area_rect) +",ratio = " + "{:3.2f}".format(target_ratio) )
                 if (target_ratio < TARGET_MAX_RATIO and target_ratio > TARGET_MIN_RATIO):
-                    cv2.putText(image, str (area_rect), (round(x+w/2),y), FONT, 1,(255,255,255),2,cv2.LINE_AA)
-                    cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
-                    cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
-
-                    # image points (from bounding rectangle around target):
-                    # upper-left corner: (x,y) upper-right corner: (x+w,y)
-                    # lower-left corner: (x,y+h) lower-right corner: (x+w,y+h)
-                    image_points = np.array([
-                                            (x, y),
-                                            (x+w, y),
-                                            (x, y+h),
-                                            (x+w, y+h)
-                                            ], dtype="double")
-
-                    ret, rvec, tvec = cv2.solvePnP(object_points_upper_left, image_points, camera_matrix, distortion_coefficients)
-                    x_object = tvec[0][0]
-                    z_object = tvec[2][0]
-                    distance = math.sqrt(x_object**2 + z_object**2) # mm
-                    distance = distance / MM_TO_INCHES
-                    #angle = math.atan2(x_object,z_object)
-                    angle_to = (x - CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
+                    if (cv2.getTrackbarPos("mode", "window") == 1):
+                        cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
+                        cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
+                    
+                    distance = 0
+                    x_center = x + round(w/2)
+                    angle_to = (x_center - CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
 
                     target_data = "%d,%.2f,%.2f" % (target_id, distance, angle_to)
                     target_id = target_id + 1
-                    if (cv2.getTrackbarPos("network table", "window") == 1):
-                        vis_nt.putString("Target", target_data)
+                    vis_nt.putString("Target", target_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
                         print (target_data)
                         #dt = (time.process_time()-start)*1000 #execution time in ms
