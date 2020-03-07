@@ -45,35 +45,6 @@ camera_matrix = np.array([
 
 distortion_coefficients = np.array([0.08538889489545388, 0.4977001277591947, -0.0022912208997961027, -0.005253011701686469, -2.761625574572033])
 
-# object points upper left
-# world coordinates are defined with the origin in the upper-left corner
-# units are in mm, since camera calibration is done in mm 
-# upper-left corner: (0,0,0) upper-right corner: (977.9,0,0)
-# lower-left corner: (0,431.8,0) lower-right corner: (977.9,431.8,0)
-               
-object_points_upper_left = np.array([
-                                    (0.0, 0.0, 0.0),
-                                    (977.9, 0.0, 0.0),
-                                    (0.0, 431.8, 0.0),
-                                    (977.9, 431.8, 0.0)
-                                    ])
-
-# object points bottom center
-# world coordinates are defined with the origin in the bottom center
-# units are in mm, since camera calibration is done in mm 
-# upper-left corner: (-488.95, 431.8, 0) upper-right corner: (488.95,431.8,0)
-# lower-left corner: (-488.95,0,0) lower-right corner: (488.95,0,0)
-               
-object_points_bottom_center = np.array([
-                                       (-488.95, 431.8, 0.0),
-                                       (488.95, 431.8, 0.0),
-                                       (-488.95, 0.0, 0.0),
-                                       (488.95, 0.0, 0.0)
-                                       ])
-
-#mtx = [[248.01186724863015, 0.0, 152.48419871015008], [0.0, 247.4901149147132, 117.42065682051265], [0.0, 0.0, 1.0]]
-#dist = [[0.08538889489545388, 0.4977001277591947, -0.0022912208997961027, -0.005253011701686469, -2.761625574572033]]
-
 def on_trackbar():
     pass 
 
