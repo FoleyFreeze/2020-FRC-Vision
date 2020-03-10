@@ -23,6 +23,13 @@ CAMERA_MUX_ENABLE1_PIN = 11
 CAMERA_MUX_ENABLE2_PIN = 12
 HORIZONTAL_FOV = 62.2 # degrees, per Pi Camera spec
 HORIZONTAL_DEGREES_PER_PIXEL = (HORIZONTAL_FOV / 320)
+VERTICAL_FOV = 48.8 # degrees, per Pi Camera spec
+VERTICAL_DEGREES_PER_PIXEL = (VERTICAL_FOV / 240)
+CAMERA_HEIGHT = 27.0 # inches, from floor
+TARGET_HEIGHT = 53.25 # inches, from floor
+HEIGHT_FOR_DISTANCE = TARGET_HEIGHT - CAMERA_HEIGHT
+CAMERA_MOUNT_ANGLE = 30.5
+CAMERA_MOUNT_OFFSET = 3.3
 
 INVALID_CAMERA = 0
 CAMERA_A = 1
@@ -292,6 +299,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
     if (check_target() == True):
         if((camera_adapter_installed == True) and (current_camera != TARGET_CAMERA)):
             current_camera = enable_camera(TARGET_CAMERA)
+        # Find the target by calculating a ratio based on the area of a contour ()> 100) to the area of bounding rectangle for that contour and see if that ratio is in a certain range
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             x,y,w,h = cv2.boundingRect(c)
@@ -305,12 +313,21 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                     if (cv2.getTrackbarPos("mode", "window") == 1):
                         cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
                         cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
-                    
-                    distance = 0
-                    x_center = x + round(w/2)
-                    angle_to = (x_center - CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
 
-                    target_data = "%d,%.2f,%.2f" % (target_id, distance, angle_to)
+                    # Calculate
+                    y_center = y + h
+                    angle_to_y = (y_center - VERTICAL_CENTER_PIXEL) * VERTICAL_DEGREES_PER_PIXEL
+
+                    x_center = x + round(w/2)
+                    angle_to_x = (x_center - HORIZONTAL_CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
+
+                    distance_camera = HEIGHT_FOR_DISTANCE / math.tan(radians(angle_to_y + CAMERA_MOUNT_ANGLE))
+                    distance_center = sqrt((distance_camera * distance_camera) + (CAMERA_MOUNT_OFFSET * CAMERA_MOUNT_OFFSET) - (2 * distance_camera * CAMERA_MOUNT_OFFSET * math.cos(radians(90 - angle_to_x))))
+                    
+                    angle_to_center = math.degrees(math.asin((math.sin(radians(angle_to_x)) * distance_camera / distance_center)))
+                    angle_to_center = 90 - angle_to_center
+
+                    target_data = "%d,%.2f,%.2f" % (target_id, distance_center, angle_to_center)
                     target_id = target_id + 1
                     vis_nt.putString("Target", target_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
