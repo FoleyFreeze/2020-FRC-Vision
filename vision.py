@@ -27,9 +27,11 @@ VERTICAL_FOV = 48.8 # degrees, per Pi Camera spec
 VERTICAL_DEGREES_PER_PIXEL = (VERTICAL_FOV / 240)
 CAMERA_HEIGHT = 27.0 # inches, from floor
 TARGET_HEIGHT = 53.25 # inches, from floor
-HEIGHT_FOR_DISTANCE = TARGET_HEIGHT - CAMERA_HEIGHT
+ADJUSTED_TARGET_HEIGHT = TARGET_HEIGHT - CAMERA_HEIGHT
 CAMERA_MOUNT_ANGLE = 30.5
 CAMERA_MOUNT_OFFSET = 3.3
+X_CENTER_ADJUSTMENT = 0
+Y_CENTER_ADJUSTMENT = 0
 
 INVALID_CAMERA = 0
 CAMERA_A = 1
@@ -314,17 +316,19 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
                         cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
 
-                    # Calculate
-                    y_center = y + h
+                    # Calculate distance and angle
+                    y_center = (y + h) + Y_CENTER_ADJUSTMENT
                     angle_to_y = (y_center - VERTICAL_CENTER_PIXEL) * VERTICAL_DEGREES_PER_PIXEL
 
-                    x_center = x + round(w/2)
+                    x_center = (x + round(w/2)) + X_CENTER_ADJUSTMENT
                     angle_to_x = (x_center - HORIZONTAL_CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
 
-                    distance_camera = HEIGHT_FOR_DISTANCE / math.tan(radians(angle_to_y + CAMERA_MOUNT_ANGLE))
-                    distance_center = sqrt((distance_camera * distance_camera) + (CAMERA_MOUNT_OFFSET * CAMERA_MOUNT_OFFSET) - (2 * distance_camera * CAMERA_MOUNT_OFFSET * math.cos(radians(90 - angle_to_x))))
-                    
-                    angle_to_center = math.degrees(math.asin((math.sin(radians(angle_to_x)) * distance_camera / distance_center)))
+                    distance_camera = ADJUSTED_TARGET_HEIGHT / math.tan(math.radians(angle_to_y + CAMERA_MOUNT_ANGLE))
+                    angle_camera_distance_and_camera_center = 90 + angle_to_x
+
+                    distance_center = sqrt((distance_camera * distance_camera) + (CAMERA_MOUNT_OFFSET * CAMERA_MOUNT_OFFSET) - (2 * distance_camera * CAMERA_MOUNT_OFFSET * math.cos(math.radians(angle_camera_distance_and_camera_center))))
+
+                    angle_to_center = math.degrees(math.asin((distance_center * math.sin(radians(angle_camera_distance_and_camera_center))) / distance_camera))
                     angle_to_center = 90 - angle_to_center
 
                     target_data = "%d,%.2f,%.2f" % (target_id, distance_center, angle_to_center)
@@ -335,7 +339,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         #dt = (time.process_time()-start)*1000 #execution time in ms
                         #print("Target_dt: %2.2f" % dt)
                     break
-
+                    
     # Display images
     debug = cv2.getTrackbarPos("mode", "window")
     if (debug == 1):
