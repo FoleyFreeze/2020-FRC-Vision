@@ -23,6 +23,15 @@ CAMERA_MUX_ENABLE1_PIN = 11
 CAMERA_MUX_ENABLE2_PIN = 12
 HORIZONTAL_FOV = 62.2 # degrees, per Pi Camera spec
 HORIZONTAL_DEGREES_PER_PIXEL = (HORIZONTAL_FOV / 320)
+VERTICAL_FOV = 48.8 # degrees, per Pi Camera spec
+VERTICAL_DEGREES_PER_PIXEL = (VERTICAL_FOV / 240)
+CAMERA_HEIGHT = 27.0 # inches, from floor
+TARGET_HEIGHT = 53.25 # inches, from floor
+ADJUSTED_TARGET_HEIGHT = TARGET_HEIGHT - CAMERA_HEIGHT
+CAMERA_MOUNT_ANGLE = 30.5
+CAMERA_MOUNT_OFFSET = 3.3 # inches, from robot center
+X_CENTER_ADJUSTMENT = 0
+Y_CENTER_ADJUSTMENT = 0
 
 INVALID_CAMERA = 0
 CAMERA_A = 1
@@ -44,35 +53,6 @@ camera_matrix = np.array([
                          ])
 
 distortion_coefficients = np.array([0.08538889489545388, 0.4977001277591947, -0.0022912208997961027, -0.005253011701686469, -2.761625574572033])
-
-# object points upper left
-# world coordinates are defined with the origin in the upper-left corner
-# units are in mm, since camera calibration is done in mm 
-# upper-left corner: (0,0,0) upper-right corner: (977.9,0,0)
-# lower-left corner: (0,431.8,0) lower-right corner: (977.9,431.8,0)
-               
-object_points_upper_left = np.array([
-                                    (0.0, 0.0, 0.0),
-                                    (977.9, 0.0, 0.0),
-                                    (0.0, 431.8, 0.0),
-                                    (977.9, 431.8, 0.0)
-                                    ])
-
-# object points bottom center
-# world coordinates are defined with the origin in the bottom center
-# units are in mm, since camera calibration is done in mm 
-# upper-left corner: (-488.95, 431.8, 0) upper-right corner: (488.95,431.8,0)
-# lower-left corner: (-488.95,0,0) lower-right corner: (488.95,0,0)
-               
-object_points_bottom_center = np.array([
-                                       (-488.95, 431.8, 0.0),
-                                       (488.95, 431.8, 0.0),
-                                       (-488.95, 0.0, 0.0),
-                                       (488.95, 0.0, 0.0)
-                                       ])
-
-#mtx = [[248.01186724863015, 0.0, 152.48419871015008], [0.0, 247.4901149147132, 117.42065682051265], [0.0, 0.0, 1.0]]
-#dist = [[0.08538889489545388, 0.4977001277591947, -0.0022912208997961027, -0.005253011701686469, -2.761625574572033]]
 
 def on_trackbar():
     pass 
@@ -321,6 +301,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
     if (check_target() == True):
         if((camera_adapter_installed == True) and (current_camera != TARGET_CAMERA)):
             current_camera = enable_camera(TARGET_CAMERA)
+        # Find the target by calculating a ratio based on the area of a contour ()> 100) to the area of bounding rectangle for that contour and see if that ratio is in a certain range
         contours,hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             x,y,w,h = cv2.boundingRect(c)
@@ -334,12 +315,23 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                     if (cv2.getTrackbarPos("mode", "window") == 1):
                         cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
                         cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
-                    
-                    distance = 0
-                    x_center = x + round(w/2)
-                    angle_to = (x_center - CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
 
-                    target_data = "%d,%.2f,%.2f" % (target_id, distance, angle_to)
+                    # Calculate distance and angle
+                    y_center = round(y + h) + Y_CENTER_ADJUSTMENT
+                    angle_to_y = (y_center - VERTICAL_CENTER_PIXEL) * VERTICAL_DEGREES_PER_PIXEL
+
+                    x_center = round(x + w) + X_CENTER_ADJUSTMENT
+                    angle_to_x = (x_center - HORIZONTAL_CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
+
+                    distance_camera = ADJUSTED_TARGET_HEIGHT / math.tan(math.radians(angle_to_y + CAMERA_MOUNT_ANGLE))
+                    angle_camera_distance_and_camera_center = 90 + angle_to_x
+
+                    distance_center = sqrt((distance_camera * distance_camera) + (CAMERA_MOUNT_OFFSET * CAMERA_MOUNT_OFFSET) - (2 * distance_camera * CAMERA_MOUNT_OFFSET * math.cos(math.radians(angle_camera_distance_and_camera_center))))
+
+                    angle_to_center = math.degrees(math.asin((distance_center * math.sin(radians(angle_camera_distance_and_camera_center))) / distance_camera))
+                    angle_to_center = 90 - angle_to_center
+
+                    target_data = "%d,%.2f,%.2f" % (target_id, distance_center, angle_to_center)
                     target_id = target_id + 1
                     vis_nt.putString("Target", target_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
@@ -347,7 +339,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         #dt = (time.process_time()-start)*1000 #execution time in ms
                         #print("Target_dt: %2.2f" % dt)
                     break
-
+                    
     # Display images
     debug = cv2.getTrackbarPos("mode", "window")
     if (debug == 1):
