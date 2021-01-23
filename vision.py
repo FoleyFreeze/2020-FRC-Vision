@@ -29,7 +29,7 @@ CAMERA_HEIGHT = 27.0 # inches, from floor
 TARGET_HEIGHT = 53.25 # inches, from floor
 ADJUSTED_TARGET_HEIGHT = TARGET_HEIGHT - CAMERA_HEIGHT
 CAMERA_MOUNT_ANGLE = 30.5
-CAMERA_MOUNT_OFFSET = 3.3
+CAMERA_MOUNT_OFFSET = 3.3 # inches, from robot center
 X_CENTER_ADJUSTMENT = 0
 Y_CENTER_ADJUSTMENT = 0
 VERTICAL_CENTER_PIXEL = 119.5
@@ -332,10 +332,10 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
 
                     # Calculate distance and angle
-                    y_center = (y + h) + Y_CENTER_ADJUSTMENT
+                    y_center = round(y + h) + Y_CENTER_ADJUSTMENT
                     angle_to_y = (y_center - VERTICAL_CENTER_PIXEL) * VERTICAL_DEGREES_PER_PIXEL
 
-                    x_center = (x + round(w/2)) + X_CENTER_ADJUSTMENT
+                    x_center = round(x + w) + X_CENTER_ADJUSTMENT
                     angle_to_x = (x_center - HORIZONTAL_CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
 
                     distance_camera = ADJUSTED_TARGET_HEIGHT / math.tan(math.radians(angle_to_y + CAMERA_MOUNT_ANGLE))
