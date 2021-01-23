@@ -10,7 +10,7 @@ import RPi.GPIO as GPIO
 import smbus
 import math
 
-AREA_BALL = 210    #150 125 200
+AREA_BALL = 70 #210    #150 125 200
 CENTER_PIXEL = 159.5
 CURVE_MIN = 4
 DEFAULT_PARAMETERS_FILENAME = "params.ini"
@@ -32,6 +32,11 @@ CAMERA_MOUNT_ANGLE = 30.5
 CAMERA_MOUNT_OFFSET = 3.3
 X_CENTER_ADJUSTMENT = 0
 Y_CENTER_ADJUSTMENT = 0
+VERTICAL_CENTER_PIXEL = 119.5
+HORIZONTAL_CENTER_PIXEL = 159.5
+DISTANCE_CALCUATION_CONSTANT = 198.86
+BALL_ACTUAL_DIAMETER = 7
+DISTANCE_TO_ROBOT_EDGE = 7.75
 
 INVALID_CAMERA = 0
 CAMERA_A = 1
@@ -101,7 +106,7 @@ def check_ball():
     #TODO check for network table command here
 
 def check_target():
-    if ( (cv2.getTrackbarPos("target", "window") == 1) or (pi_nt.getBoolean("TgtEnable",True) is True) ):
+    if ( (cv2.getTrackbarPos("target", "window") == 1)): #or (pi_nt.getBoolean("TgtEnable",True) is True) ):
         return True
     else: 
         return False
@@ -166,11 +171,11 @@ if (camera_adapter_installed == True):
 
 cam = PiCamera ()
 cam.resolution = (320, 240)
-cam.exposure_mode = "snow"
-cam.awb_mode = "off"
-cam.awb_gains = (1.3, 1.8)
-cam.shutter_speed = 8000
-cam.saturation = -50
+#cam.exposure_mode = "snow"
+#cam.awb_mode = "off"
+#cam.awb_gains = (1.3, 1.8)
+#cam.shutter_speed = 8000
+#cam.saturation = -50
 time.sleep(2)
 rawcapture = PiRGBArray (cam, size=(320,240))
 
@@ -280,21 +285,31 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                 (x,y), radius = cv2.minEnclosingCircle(c)
                 area_ball = cv2.contourArea(c)
                 center = (int (x), int (y))
+                # next line is used when calibrating distance formula
+                # print(int(x), int(y))
                 radius = int(radius)
                 if(area_ball > AREA_BALL):
                     cv2.circle(image, center, radius, (0,0,255), 2)
-                    distance = 0.00272*y*y - 1.3546*y + 180
-                    fov = (-0.568*y + 653.5)/2
-                    difference = x - CENTER_PIXEL
-                    angle = difference*(60/fov)
-
-                    ball_data = "%d,%.2f,%.2f" % (ball_id, distance, angle)
+                    angle = (x - CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
+                    # below method of distance calculation is using triangle similarity, not very accurate with tilted camera
+                    # distance = (BALL_ACTUAL_DIAMETER * DISTANCE_CALCUATION_CONSTANT) / (2*radius)
+                    # real_distance = math.sqrt(distance**2 + DISTANCE_TO_ROBOT_EDGE**2 - 2 * distance * DISTANCE_TO_ROBOT_EDGE * math.cos(math.radians(angle)))
+                    real_distance = 50.8531 + 0.0149 * int(x) - 0.1659 * int(y)
+                    theta1 = math.degrees(math.asin(DISTANCE_TO_ROBOT_EDGE * math.sin(math.radians(math.fabs(angle))) / real_distance))
+                    theta2 = 180 - (theta1 + math.fabs(angle))
+                    real_angle_absolute = 180 - theta2
+                    
+                    if(angle < 0):
+                        real_angle = 0 - real_angle_absolute
+                    else:
+                        real_angle = real_angle_absolute
+                    ball_data = "%d,%.2f,%.2f,%.2f" % (ball_id, angle, real_distance, real_angle)
                     ball_id = ball_id + 1
                     vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
+
                         print (ball_data)
-                        #dt = (time.process_time()-start)*1000 #execution time in ms
-                        #print("Ball_dt: %2.2f" % dt)
+                        dt = (time.process_time()-start)*1000 #execution time in ms
                     break
                     
     # Target functions
@@ -326,9 +341,9 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                     distance_camera = ADJUSTED_TARGET_HEIGHT / math.tan(math.radians(angle_to_y + CAMERA_MOUNT_ANGLE))
                     angle_camera_distance_and_camera_center = 90 + angle_to_x
 
-                    distance_center = sqrt((distance_camera * distance_camera) + (CAMERA_MOUNT_OFFSET * CAMERA_MOUNT_OFFSET) - (2 * distance_camera * CAMERA_MOUNT_OFFSET * math.cos(math.radians(angle_camera_distance_and_camera_center))))
+                    distance_center = math.sqrt((distance_camera * distance_camera) + (CAMERA_MOUNT_OFFSET * CAMERA_MOUNT_OFFSET) - (2 * distance_camera * CAMERA_MOUNT_OFFSET * math.cos(math.radians(angle_camera_distance_and_camera_center))))
 
-                    angle_to_center = math.degrees(math.asin((distance_center * math.sin(radians(angle_camera_distance_and_camera_center))) / distance_camera))
+                    angle_to_center = math.degrees(math.asin((distance_center * math.sin(math.radians(angle_camera_distance_and_camera_center))) / distance_camera))
                     angle_to_center = 90 - angle_to_center
 
                     target_data = "%d,%.2f,%.2f" % (target_id, distance_center, angle_to_center)
@@ -345,7 +360,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
     if (debug == 1):
         cv2.imshow("Image", image)
         cv2.imshow("mask", mask)
-    else: 	
+    else:   
         if (cv2.getWindowProperty("Image", cv2.WND_PROP_VISIBLE) == 1):
             cv2.destroyWindow("Image")
         if (cv2.getWindowProperty("mask", cv2.WND_PROP_VISIBLE) == 1):
@@ -353,6 +368,12 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
 
     # Clear stream for image array 
     rawcapture.truncate(0)
+    
+    #Calculate time elapsed to get one frame
+    end = time.process_time()
+    timeElapsed = end-start
+    if (debug == 1):
+        print("dt:" + "{:3.2f}".format(timeElapsed*1000))
 
     # Wait for 1ms to see if the escape key was pressed, and if so, exit
     key = cv2.waitKey(1)
