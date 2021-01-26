@@ -99,14 +99,13 @@ def load_parameters(filename):
     print("Loaded " + filename)
 
 def check_ball():
-    if (cv2.getTrackbarPos("ball", "window") == 1): 
+    if ( (cv2.getTrackbarPos("ball", "window") == 1)) or (pi_nt.getBoolean("BallEnable",False) is True):
         return True
     else: 
         return False
-    #TODO check for network table command here
-
+    
 def check_target():
-    if ( (cv2.getTrackbarPos("target", "window") == 1)): #or (pi_nt.getBoolean("TgtEnable",True) is True) ):
+    if ( (cv2.getTrackbarPos("target", "window") == 1)) or (pi_nt.getBoolean("TgtEnable",False) is True):
         return True
     else: 
         return False
@@ -140,12 +139,6 @@ def enable_camera(cam):
     print("Camera " + CAMERA_NAMES[set_cam] + " enabled")
     return(set_cam)
 
-def makeNTConnection():
-    NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
-    if (cv2.getTrackbarPos("network table", "window") == 1):
-        while (not NetworkTables.isConnected()):
-            time.sleep(0.5)
-        print ("NT connected to " + getRemoteAddress())
     
 if (camera_adapter_installed == True):
     bus = smbus.SMBus(1) # Used to select a camera on the I2C mux on the camera mux board
@@ -218,7 +211,7 @@ print("Started")
 if(cv2.getTrackbarPos("delay", "window") == 1):
     time.sleep(16)
 
-makeNTConnection()
+NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
 NetworkTables.setUpdateRate(0.040)
 vis_nt = NetworkTables.getTable("Vision")
 pi_nt = NetworkTables.getTable("Pi")
@@ -236,7 +229,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
         pi_alive_time = time.process_time()
 
         if (not NetworkTables.isConnected()):
-            makeNTConnection()
+            NetworkTables.initialize(server=ROBORIO_SERVER_STATIC_IP)
             NetworkTables.setUpdateRate(0.040)
             vis_nt = NetworkTables.getTable("Vision")
             pi_nt = NetworkTables.getTable("Pi")
