@@ -25,18 +25,15 @@ HORIZONTAL_FOV = 62.2 # degrees, per Pi Camera spec
 HORIZONTAL_DEGREES_PER_PIXEL = (HORIZONTAL_FOV / 320)
 VERTICAL_FOV = 48.8 # degrees, per Pi Camera spec
 VERTICAL_DEGREES_PER_PIXEL = (VERTICAL_FOV / 240)
-CAMERA_HEIGHT = 27.0 # inches, from floor
-TARGET_HEIGHT = 53.25 # inches, from floor
-ADJUSTED_TARGET_HEIGHT = TARGET_HEIGHT - CAMERA_HEIGHT
+CAMERA_HEIGHT = 32.0 # inches, from floor
+TARGET_HEIGHT = 98.25 - 8.5 # units are 1nches, location : center of target to floor - half way between midpoint of target and bottom of target, includes width of tape
 CAMERA_MOUNT_ANGLE = 30.5
-CAMERA_MOUNT_OFFSET = 3.3 # inches, from robot center
 X_CENTER_ADJUSTMENT = 0
 Y_CENTER_ADJUSTMENT = 0
-VERTICAL_CENTER_PIXEL = 119.5
-HORIZONTAL_CENTER_PIXEL = 159.5
-DISTANCE_CALCUATION_CONSTANT = 198.86
-BALL_ACTUAL_DIAMETER = 7
-DISTANCE_TO_ROBOT_EDGE = 7.75
+DISTANCE_TO_ROBOT_EDGE = 7.75 # units are inches, measured on practice robot
+VERTICAL_PIXEL_CENTER = 119.5
+HORIZONTAL_PIXEL_CENTER = 159.5
+TARGET_CAMERA_MOUNT_OFFSET = 2.0 # units are inches, measured on practice robot
 
 INVALID_CAMERA = 0
 CAMERA_A = 1
@@ -300,9 +297,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                     ball_id = ball_id + 1
                     vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
-
                         print (ball_data)
-                        dt = (time.process_time()-start)*1000 #execution time in ms
                     break
                     
     # Target functions
@@ -324,28 +319,20 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         cv2.rectangle(image,(x,y),(x+w,y+h),(0,255,0),2)
                         cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
 
-                    # Calculate distance and angle
-                    y_center = round(y + h) + Y_CENTER_ADJUSTMENT
-                    angle_to_y = (y_center - VERTICAL_CENTER_PIXEL) * VERTICAL_DEGREES_PER_PIXEL
+                    vertical_pixel_angle = (y + h/2) - VERTICAL_PIXEL_CENTER * VERTICAL_DEGREES_PER_PIXEL
+                    camera_target_distance = (TARGET_HEIGHT - CAMERA_HEIGHT) / math.tan(math.radians(vertical_pixel_angle + CAMERA_MOUNT_ANGLE))
 
-                    x_center = round(x + w) + X_CENTER_ADJUSTMENT
-                    angle_to_x = (x_center - HORIZONTAL_CENTER_PIXEL) * HORIZONTAL_DEGREES_PER_PIXEL
+                    horizontal_pixel_angle = (x + w/2) - HORIZONTAL_PIXEL_CENTER * HORIZONTAL_DEGREES_PER_PIXEL
+                    real_target_distance = math.sqrt(camera_target_distance**2 + TARGET_CAMERA_MOUNT_OFFSET**2 - 2*camera_target_distance*TARGET_CAMERA_MOUNT_OFFSET*math.cos(math.radians(90 - math.fabs(horizontal_pixel_angle))))
 
-                    distance_camera = ADJUSTED_TARGET_HEIGHT / math.tan(math.radians(angle_to_y + CAMERA_MOUNT_ANGLE))
-                    angle_camera_distance_and_camera_center = 90 + angle_to_x
+                    angle_real_temp = math.degrees(math.asin((math.sin(math.radians(90 - horizontal_pixel_angle)) * TARGET_CAMERA_MOUNT_OFFSET) / real_target_distance))
+                    angle_real = (180 - (angle_real_temp + (90 - horizontal_pixel_angle))) - 90
 
-                    distance_center = math.sqrt((distance_camera * distance_camera) + (CAMERA_MOUNT_OFFSET * CAMERA_MOUNT_OFFSET) - (2 * distance_camera * CAMERA_MOUNT_OFFSET * math.cos(math.radians(angle_camera_distance_and_camera_center))))
-
-                    angle_to_center = math.degrees(math.asin((distance_center * math.sin(math.radians(angle_camera_distance_and_camera_center))) / distance_camera))
-                    angle_to_center = 90 - angle_to_center
-
-                    target_data = "%d,%.2f,%.2f" % (target_id, distance_center, angle_to_center)
+                    target_data = "%d,%.2f,%.2f,%.2f" % (target_id, horizontal_pixel_angle, real_target_distance, angle_real)
                     target_id = target_id + 1
                     vis_nt.putString("Target", target_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
                         print (target_data)
-                        #dt = (time.process_time()-start)*1000 #execution time in ms
-                        #print("Target_dt: %2.2f" % dt)
                     break
                     
     # Display images
