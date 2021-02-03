@@ -7,7 +7,7 @@ import PySimpleGUI as sg
 import configparser
 from networktables import NetworkTables
 import RPi.GPIO as GPIO
-import smbus
+import smbus2
 import math
 
 AREA_BALL = 70 #210    #150 125 200
@@ -293,7 +293,8 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         real_angle = 0 - real_angle_absolute
                     else:
                         real_angle = real_angle_absolute
-                    ball_data = "%d,%.2f,%.2f,%.2f" % (ball_id, angle, real_distance, real_angle)
+                    #ball_data = "%d,%.2f,%.2f,%.2f" % (ball_id, angle, real_distance, real_angle)
+                    ball_data = "%d,%.2f,%.2f" % (ball_id, real_distance, real_angle)
                     ball_id = ball_id + 1
                     vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
