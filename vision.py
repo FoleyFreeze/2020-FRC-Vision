@@ -295,6 +295,11 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         real_angle = real_angle_absolute
                     #ball_data = "%d,%.2f,%.2f,%.2f" % (ball_id, angle, real_distance, real_angle)
                     ball_data = "%d,%.2f,%.2f" % (ball_id, real_distance, real_angle)
+                    # uncomment next four lines if you want to create a csv file of time stamped ball data
+                    #csv_ball_data = "%.2f,%s" % (time.process_time(), ball_data)
+                    #fo = open("bal_data.csv", "a+")
+                    #fo.write(csv_ball_data + '\n')
+                    #fo.close()
                     ball_id = ball_id + 1
                     vis_nt.putString("Ball", ball_data)
                     if (cv2.getTrackbarPos("mode", "window") == 1):
