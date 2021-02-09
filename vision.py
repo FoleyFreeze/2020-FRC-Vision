@@ -170,6 +170,8 @@ time.sleep(2)
 rawcapture = PiRGBArray (cam, size=(320,240))
 
 ball_id = 0
+ball_dist_avg = []
+ball_angle_avg = []
 target_id = 0
 
 lower_hue= 0
@@ -215,6 +217,8 @@ pi_nt = NetworkTables.getTable("Pi")
 
 pi_alive_time = time.process_time()
 pi_alive_value = 0
+
+fo = open("ball_data.csv", "a+")
 
 for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=True):
     
@@ -293,18 +297,26 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         real_angle = 0 - real_angle_absolute
                     else:
                         real_angle = real_angle_absolute
-                    #ball_data = "%d,%.2f,%.2f,%.2f" % (ball_id, angle, real_distance, real_angle)
-                    ball_data = "%d,%.2f,%.2f" % (ball_id, real_distance, real_angle)
-                    # uncomment next four lines if you want to create a csv file of time stamped ball data
-                    #csv_ball_data = "%.2f,%s" % (time.process_time(), ball_data)
-                    #fo = open("bal_data.csv", "a+")
-                    #fo.write(csv_ball_data + '\n')
-                    #fo.close()
-                    ball_id = ball_id + 1
-                    vis_nt.putString("Ball", ball_data)
-                    if (cv2.getTrackbarPos("mode", "window") == 1):
-                        print (ball_data)
-                    break
+                    
+                    ball_dist_avg = ball_dist_avg + [real_distance]
+                    ball_angle_avg = ball_angle_avg + [real_angle]
+                    if (len(ball_dist_avg) == 3 and len(ball_angle_avg) == 3):
+                        ball_real_dist_avg = (ball_dist_avg[0] + ball_dist_avg[1] + ball_dist_avg[2])/3
+                        ball_dist_avg.clear()
+                        ball_real_angle_avg = (ball_angle_avg[0] + ball_angle_avg[1] + ball_angle_avg[2])/3
+                        ball_angle_avg.clear()
+
+
+                        #ball_data = "%d,%.2f,%.2f,%.2f" % (ball_id, angle, real_distance, real_angle)
+                        ball_data = "%d,%.2f,%.2f" % (ball_id, ball_real_dist_avg, ball_real_angle_avg)
+                        # uncomment next four lines if you want to create a csv file of time stamped ball data
+                        ball_id = ball_id + 1
+                        vis_nt.putString("Ball", ball_data)
+                        csv_ball_data = "%.4f,%s" % (time.process_time(), ball_data)
+                        fo.write(csv_ball_data + '\n')
+                        if (cv2.getTrackbarPos("mode", "window") == 1):
+                            print (ball_data)
+                        break
                     
     # Target functions
     if (check_target() == True):
@@ -365,6 +377,7 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
     key = cv2.waitKey(1)
     
     if key == 27: # Press esc, close program
+        fo.close()
         break
     elif key == ord('s'): # Press 's', save parameters
         fname = sg.popup_get_file('Save Parameters')
