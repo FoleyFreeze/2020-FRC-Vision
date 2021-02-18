@@ -218,7 +218,8 @@ pi_nt = NetworkTables.getTable("Pi")
 pi_alive_time = time.process_time()
 pi_alive_value = 0
 
-fo = open("ball_data.csv", "a+")
+# uncomment to capture data to a file
+# fo = open("ball_data.csv", "a+")
 
 for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=True):
     
@@ -313,7 +314,8 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
                         ball_id = ball_id + 1
                         vis_nt.putString("Ball", ball_data)
                         csv_ball_data = "%.4f,%s" % (time.process_time(), ball_data)
-                        fo.write(csv_ball_data + '\n')
+                        # uncomment to capture data to a file
+                        # fo.write(csv_ball_data + '\n')
                         if (cv2.getTrackbarPos("mode", "window") == 1):
                             print (ball_data)
                         break
@@ -377,7 +379,8 @@ for frame in cam.capture_continuous(rawcapture, format="bgr", use_video_port=Tru
     key = cv2.waitKey(1)
     
     if key == 27: # Press esc, close program
-        fo.close()
+        # uncomment to capture data to a file
+        # fo.close()
         break
     elif key == ord('s'): # Press 's', save parameters
         fname = sg.popup_get_file('Save Parameters')
